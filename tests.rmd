@@ -1,7 +1,7 @@
 ---
 title: "Binary Segmentation Tests"
 author: Diego Enrique Jiménez Urgell
-date: March 8th, 2020
+date: March 9th, 2021
 
 output:
     prettydoc::html_pretty:
