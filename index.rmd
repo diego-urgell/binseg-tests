@@ -69,7 +69,7 @@ to the specified number of segments. In this case, it computes the parameter for
 
 ```{r}
 # Generate the changepoint model
-models.binsegRcpp <- binseg_normal(nb.profiles[['logratio']], 5)
+models.binsegRcpp <- binsegRcpp::binseg_normal(nb.profiles[['logratio']], 5)
 
 # Obtaining the table with parameters for models from 1 to 5 segments.
 models.binsegRcpp.coef <- coef(models.binsegRcpp)
@@ -176,31 +176,19 @@ it considers the trivial one segment model. A function was created to produce th
 repeated later.
 
 ```{r fig.align='center', dpi=250}
-binseg.cpts = data.frame(changepoint=c(1:5), index=sort(models.binsegRcpp[['end']]))
-changepoint.cpts = data.frame(changepoint=c(1:4), index=cpts((models.changepoint)))
+binseg.cpts = data.frame(changepoint=c(1:5), index=sort(models.binsegRcpp[['end']]), package=rep("binsegRcpp", 5))
+changepoint.cpts = data.frame(changepoint=c(1:4), index=cpts((models.changepoint)), package=rep("changepoint", 4))
 
-comparative_graph <- function(data1, data2, x1, y1, x2, y2, name, xlabel, ylabel, xdisp, ydisp){
-  plot <- ggplot() +
-    geom_line(data=data1,
-              mapping=aes(x=.data[[x1]], y=.data[[y1]], color="binsegRcpp"), size=2) +
-    geom_text(data=data1,
-              aes(x=.data[[x1]]+xdisp, y=.data[[y1]]+ydisp,label=round(.data[[y1]], 2)),vjust=0) +
-    geom_line(data=data2,
-              mapping=aes(x=.data[[x2]], y=.data[[y2]], color="changepoint"), size=1) +
-    geom_text(data=data2,
-              aes(x=.data[[x2]]+xdisp, y=.data[[y2]]+ydisp,label=round(.data[[y2]], 2)),vjust=0) +
-    ggtitle(label=name) +
-    labs(x=xlabel, y =ylabel, colour="Package")+
-    theme_bw() +
-    theme(plot.title=element_text(face="bold",margin=margin(t=10,b=15),size=16),
-          axis.title.x=element_text(margin=margin(t=10,b=10), size=14),
-          axis.title.y=element_text(margin=margin(r=10,l=15), size=14))
-  return(plot)
-}
+graph_style <- theme_bw() +
+  theme(plot.title=element_text(face="bold",margin=margin(t=10,b=15),size=16),
+        axis.title.x=element_text(margin=margin(t=10,b=10), size=14),
+        axis.title.y=element_text(margin=margin(r=10,l=15), size=14))
 
-comparative_graph(binseg.cpts, changepoint.cpts, 'changepoint', 'index',
-                  'changepoint', 'index', "Predicted changepoints per package",
-                  "Changepoint number", "Changepoint index", -0.1, 5 )
+ggplot(data=rbind(changepoint.cpts, binseg.cpts)) +
+  geom_line(mapping=aes(x=changepoint, y=index, color=package), size=2) +
+  geom_text(aes(x=changepoint-0.1, y=index+5,label=index)) +
+  labs(x="Changepoint Number", y="Changepoint index", colour="Package") +
+  ggtitle(label="Predicted changepoints per package") + graph_style
 
 ```
 
@@ -210,31 +198,41 @@ when these values are plotted, it is evident that they greatly differ.
 
 ```{r fig.align='center', dpi=250}
 
-changepoint.loss = data.frame(changepoint=2:5, loss=pen.value.full(models.changepoint))
+binseg.loss=data.frame(changepoint=1:5, loss=models.binsegRcpp$loss, package=rep("binsegRcpp", 5))
+changepoint.loss=data.frame(changepoint=2:5, loss=pen.value.full(models.changepoint), package=rep("changepoint", 4))
 
-comparative_graph(models.binsegRcpp, changepoint.loss, 'segments', 'loss',
-                  'changepoint', 'loss', "Loss value per segment",
-                  "Segment number", "Loss Value", 0, 0.5)
+ggplot(data=rbind(changepoint.loss, binseg.loss)) +
+  geom_line(mapping=aes(x=changepoint, y=loss, color=package), size=2) +
+  geom_text(aes(x=changepoint+0.1, y=loss+0.5,label=round(loss, 2))) +
+  labs(x="Segment number", y="Loss value", colour="Package") +
+  ggtitle(label="Loss Value per segment") + graph_style
 ```
 
-Both packages use the log-likelihood, which in this case is the squared loss function
-$$ c(segment) = \sum_{i = start}^{end} (y_i - \mu_{segment})^2$$
-to calculate the cost of a segment given a signal $y$, and segment $start$ and $end$ values with a particular mean $\mu_{segment}$.
+Both packages use the log-likelihood, in this case the squared loss, as a cost function. This function is used to
+determine the next optimal changepoint in each iteration of the Binary Segmentation algorithm; for each
+posible changepoint in a segment, the algorithm selects the one which produces the lowest sum of right and left costs. This
+value is referred to as the **best decrease**.
 
-This function is used to determine the next changepoint in an iteration of the Binary Segmentation algorithm. When a segment
-is created, there is a decrease in the cost of the model, since the sum of the cost of the two newly created segments
-will be smaller than the cost of the previous segment. Therefore, the goal is to find the changepoint which produces
-the best decrease in the loss value.
+The *changepoint* package returns the **best decrease** obtained in each iteration in the `pen.value.full` vector. However,
+it is important to note that this value is not the overall cost of the model, just the optimal decrease in the cost of the
+partitioned segment. On the other hand, binsegRcpp does return the overall cost (the sum of the cost of every segment).
 
-The changepoint package returns the best cost decrease of each iteration in the `pen.value.full` vector. However, the overall
-cost of a model is calculated by adding the cost of each individual segment. In order to obtain this computation with
-this package, it is necessary to use the `logLik` function, although only the cost of the five segments model is obtained.
+This is reflected in the graph. The cost of the trivial model (one segment) is $16.52$,  as reported by *binsegRcpp*. Then,
+for the model of two segments the cost reported by *binsegRcpp* is $9.64$, while the one reported by *changepoint* is $6.88$.
+Note that $9.64 = 16.52 - 6.88$. This shows that *changepoint* indeed returns the **best decrease**, while *binsegRcpp* does
+return the overall cost.
+
+There is the `logLik` function in *changepoint*, which does calculates the overall cost, but only of the model with $Q$ segments,
+not of every model from $1$ to $Q$. To obtain the overall cost of every model up to $Q$ segments, it is necessary to run
+`cpt.mean` $Q$ times.
+
+### Side note
 
 The binsegRcpp package manages to produce the overall cost of the model without the use of other functions, since it
 considers the one-segment model at the beginning of the algorithm. If the cost of the whole signal is known (without segmentation),
 then in each iteration the cost of the current model can be obtained by substracting the best decrease. This is equivalent
-to substracting the cost of the whole segment, and adding the costs of the two newly created segments.
-
+to substracting the cost of the whole segment (the one which is going to be partitioned), and adding the costs of the
+two newly created segments.
 
 
 # Test 3: Negative Binomial Cost Function
