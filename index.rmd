@@ -324,7 +324,7 @@ Even after correcting the errors, the predicted changepoints were not accurate e
 the cost function was rather implemented as described [here](https://almob.biomedcentral.com/articles/10.1186/1748-7188-9-6), as
 suggested by Dr. Toby Hocking. However, the value of `r` was calculated for every segment, instead of using a constant
 over dispersion parameter for the whole signal. The resulting cost function is pretty similar to the past one, but all the
-`lgamma` terms are ignored.
+`lgamma` terms are ignored. This function also has a better performance, since it does not have the `for` loop.
 
 ```{c eval = FALSE}
 
